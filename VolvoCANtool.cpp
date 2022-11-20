@@ -1,6 +1,8 @@
-/*
-UDP-клиент
-*/
+/* ===========================
+
+ПРОГРАММА ДЛЯ ВЗАИМОДЕЙСТВИЯ С CAN
+
+============================= */
 
 #include <stdlib.h>
 #include <iostream>
@@ -9,9 +11,12 @@ UDP-клиент
 #include <netdb.h> // этот хедер ради типа sockaddr_in, потому что в socket.h тлько обычный sockaddr
 #include <arpa/inet.h> // это ради функции inet_addr(), которая преобразует символьный IP-адрес в сетевой с нужным порядком байт
 #include <cstring>
-
+#include <linux/can.h>        // этот хедер ради возможности создать сокет с семейством протокола PF_CAN, ради типов frame_can, sockaddr_can
 #include <fstream>
 #include <cstdio>
+#include <net/if.h>           // этот хедер для того чтоб можно было юзать структуру ifreq
+#include <sys/ioctl.h>        // этот хедер нужен для SIOCGIFINDEX
+
 
 char * recvbuf = new char[1024];
 char * sendbuf;
@@ -27,55 +32,79 @@ int timer = 0;
 int main()
 {
 
+
+
 //    memcpy(&myPacket[252], &mycrc, 4);
 
-    char myPacket2[] = {};
+
+    int cansock;              // дескриптор сокета
+    struct sockaddr_can addr; // адресная структура для сокета
+    struct ifreq ifr;         // хуй знает что за структура. Похоже что она нужна для получения и хранения индекса интерфейса 
 
 
-    int sock, sock_upboard, sock_stm;
-    struct sockaddr_in addr;
-    struct sockaddr_in addr_upboard;
-    struct sockaddr_in addr_stm;
 
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if(sock < 0)
+
+
+    cansock = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    if(cansock < 0)
     {
-        perror("socket");
+        perror("Какая-то проблема при создании CAN-сокета (!) (дескриптор сокета меньше нуля)");
         exit(1);
     }
 
+    strcpy(ifr.ifr_name, "can0" );          // готовим объект ifr под заполнение ??
+    ioctl(cansock, SIOCGIFINDEX, &ifr);     // заполняем объект ift на основе текстового имени can0 ???
+
+    addr.can_family = AF_CAN;               // заполнение адресной структуры. Здесь мы можем получить индекс интерфейса благодаря тому 
+    addr.can_ifindex = ifr.ifr_ifindex;     // что объект ifr уже заполнен. Индекс интерфейса может быть 0, если нужно привязаться ко всем CAN-интерфейсам
 
 
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(8007);
-    addr.sin_addr.s_addr = inet_addr("192.168.123.111");
-    bind(sock, (sockaddr *) &addr, sizeof(addr));
-
-    addr_stm.sin_family = AF_INET;
-    addr_stm.sin_port = htons(8007);
-    addr_stm.sin_addr.s_addr = inet_addr("192.168.123.10");
-
-    sock_stm = socket(AF_INET, SOCK_DGRAM, 0);
-
-
-    // перехватываем трафик на себя отправкой хуйни
-    //sendto(sock_stm, "ttt", 3, 0, (struct sockaddr *)&addr_stm, sizeof(addr_stm));
+    bind(cansock, (sockaddr *) &addr, sizeof(addr));
+    printf("Индекс интерфейса для привязки: %x \n", ifr.ifr_ifindex);
 
 
 
-    sock_upboard = socket(AF_INET, SOCK_DGRAM, 0);
-    if(sock < 0)
-    {
-        perror("socket upboard");
-        exit(2);
-    }
+    struct can_frame myframe;
+    myframe.can_id = 0xAA;
+    myframe.can_dlc = 8;
+    myframe.__pad = 34;
+    myframe.__res0 = 228;
+    myframe.data[0] = 100;
+    myframe.data[1] = 100;
+    myframe.data[2] = 100;
+    myframe.data[3] = 100;
+    myframe.data[4] = 100;
+    myframe.data[5] = 100;
+    myframe.data[6] = 100;
+    myframe.data[7] = 100;
+    myframe.data[8] = 100;
+
+    
+    
+    printf("Can_id: %d \n", myframe.can_id);
+    printf("can_dlc: %d \n", myframe.can_dlc);
+    printf("data[0]: %d \n", myframe.data[0]);
+    printf("data[1]: %d \n", myframe.data[1]);
+    printf("data[2]: %d \n", myframe.data[2]);
+    printf("data[3]: %d \n", myframe.data[3]);
+    printf("data[4]: %d \n", myframe.data[4]);
+    printf("data[5]: %d \n", myframe.data[5]);
+    printf("data[6]: %d \n", myframe.data[6]);
+    printf("data[7]: %d \n", myframe.data[7]);
+    printf("Размер: %d \t", (int) sizeof(canid_t));
 
 
-    addr_upboard.sin_family = AF_INET;
-    addr_upboard.sin_port = htons(8082);
-    addr_upboard.sin_addr.s_addr = inet_addr("192.168.123.161");
+    int nbytes = write(cansock, &myframe, sizeof(struct can_frame));
+    printf("Число отправленных в интерфейс байт: %d \n", nbytes);
 
-    //sendto(sock, myPacket, sizeof(myPacket), 0, (struct sockaddr *)&addr, sizeof(addr));
+
+
+
+
+    exit(1);
+    
+
+
     
     while(1)
     {
@@ -90,19 +119,20 @@ int main()
 
         
 
-        std::ifstream f1("../switch_pack_brakosha", std::ios::binary);
+        //std::ifstream f1("../switch_pack_brakosha", std::ios::binary);
         //f1.write(recvbuf, 820);
-        f1.read(readfilebuf, 129);
-        f1.close();
+        //f1.read(readfilebuf, 129);
+        //f1.close();
 
-        sendto(sock, readfilebuf, 129, 0, (struct sockaddr *)&addr_upboard, sizeof(addr_upboard));
+        //sendto(sock, readfilebuf, 129, 0, (struct sockaddr *)&addr_upboard, sizeof(addr_upboard));
 
 
     }
     //connect(sock, (struct sockaddr *)&addr, sizeof(addr));
     //send(sock, msg2, sizeof(msg2), 0);
     
-    close(sock);
 
+
+    close(cansock);
     return 0;
 } 
