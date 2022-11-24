@@ -28,6 +28,10 @@ char msg1[] = "Hello there!\n";
 char msg2[] = "Bye bye!\n";
 
 int timer = 0;
+int testbuffer[15];
+
+int nbytes;
+
 
 int main()
 {
@@ -42,7 +46,16 @@ int main()
     struct ifreq ifr;         // хуй знает что за структура. Похоже что она нужна для получения и хранения индекса интерфейса 
 
 
+    testbuffer[10] = 25;
+    testbuffer[250] = 100;
 
+
+    int * testbuffer2[100];
+    testbuffer2[38] = &testbuffer[10];
+
+    int myvar = *testbuffer2[38];
+
+    printf("test=%d\n", myvar);
 
 
     cansock = socket(PF_CAN, SOCK_RAW, CAN_RAW);
@@ -65,22 +78,25 @@ int main()
 
 
     struct can_frame myframe;
-    myframe.can_id = 0xAA;
+    myframe.can_id = 0xFFFFE;
     myframe.can_dlc = 8;
     myframe.__pad = 34;
     myframe.__res0 = 228;
-    myframe.data[0] = 100;
-    myframe.data[1] = 100;
-    myframe.data[2] = 100;
-    myframe.data[3] = 100;
-    myframe.data[4] = 100;
-    myframe.data[5] = 100;
-    myframe.data[6] = 100;
-    myframe.data[7] = 100;
-    myframe.data[8] = 100;
+    myframe.data[0] = 0xFF;
+    myframe.data[1] = 0x86;
+    myframe.data[2] = 0x00;
+    myframe.data[3] = 0x00;
+    myframe.data[4] = 0x00;
+    myframe.data[5] = 0x00;
+    myframe.data[6] = 0x00;
+    myframe.data[7] = 0x00;
+    
+
+    struct can_frame out_frame;
+
 
     
-    
+/*
     printf("Can_id: %d \n", myframe.can_id);
     printf("can_dlc: %d \n", myframe.can_dlc);
     printf("data[0]: %d \n", myframe.data[0]);
@@ -92,44 +108,47 @@ int main()
     printf("data[6]: %d \n", myframe.data[6]);
     printf("data[7]: %d \n", myframe.data[7]);
     printf("Размер: %d \t", (int) sizeof(canid_t));
+*/
 
+    
 
-    int nbytes = write(cansock, &myframe, sizeof(struct can_frame));
+    nbytes = write(cansock, &myframe, sizeof(struct can_frame));
+    if(nbytes < 0)
+    {
+        perror("Ошибка при записи в сокет (CAN).");
+        return 1;
+    }
+    else
     printf("Число отправленных в интерфейс байт: %d \n", nbytes);
+    printf("Будем получать...\n\n");
 
 
-
-
-
-    exit(1);
-    
-
-
-    
     while(1)
     {
-        //sendto(sock, myPacket, sizeof(myPacket), 0, (struct sockaddr *)&addr, sizeof(addr));
-        //sleep(1);
+        printf("Получение...\n");
+        nbytes = read(cansock, &out_frame, sizeof(struct can_frame));
+        if(nbytes < 0)
+        {
+            perror("Ошибка при отправке в сокет (CAN).");
+            return 1;
+        }
+
+        if(nbytes < sizeof(struct can_frame))
+        {
+            fprintf(stderr, "Ошибка. Неполный кадр принятого сообщения.\n");
+            return 1;
+        }
 
 
-        //bytes_read = recvfrom(sock_stm, recvbuf, 1024, 0, NULL, NULL);
-        //printf("Кол-во принятых байт: %d \t", bytes_read);
 
-        //sendbuf = recvbuf;
-
-        
-
-        //std::ifstream f1("../switch_pack_brakosha", std::ios::binary);
-        //f1.write(recvbuf, 820);
-        //f1.read(readfilebuf, 129);
-        //f1.close();
-
-        //sendto(sock, readfilebuf, 129, 0, (struct sockaddr *)&addr_upboard, sizeof(addr_upboard));
-
+        // вывод принятого кадра
+        printf("CAN_ID: %x \n", out_frame.can_id);
+        for(int i=0; i<8; i++)
+        {
+            printf("data[%d]: %x \n", i, out_frame.data[i]);
+        }
 
     }
-    //connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-    //send(sock, msg2, sizeof(msg2), 0);
     
 
 
